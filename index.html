@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>消音カメラ</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+```
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        overflow: hidden;
+        background: #000;
+        touch-action: none;
+    }
+
+    #camera-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+    }
+
+    #video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    #canvas {
+        display: none;
+    }
+
+    /* コントロールボタン */
+    .controls {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(transparent, rgba(0,0,0,0.7));
+        z-index: 10;
+    }
+
+    .btn {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255,255,255,0.3);
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .btn:active {
+        transform: scale(0.9);
+        background: rgba(255,255,255,0.5);
+    }
+
+    #capture-btn {
+        width: 70px;
+        height: 70px;
+        background: #fff;
+        border: 4px solid rgba(255,255,255,0.3);
+    }
+
+    .btn svg {
+        width: 30px;
+        height: 30px;
+        fill: #fff;
+    }
+
+    /* ライブラリモーダル */
+    #library-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        z-index: 100;
+        display: none;
+        flex-direction: column;
+    }
+
+    #library-modal.show {
+        display: flex;
+    }
+
+    .modal-header {
+        padding: 15px 20px;
+        background: #1c1c1e;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #fff;
+    }
+
+    .modal-header h2 {
+        font-size: 18px;
+        font-weight: 600;
+    }
+
+    .header-btn {
+        background: none;
+        border: none;
+        color: #007aff;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 5px 10px;
+    }
+
+    .header-btn:disabled {
+        color: #666;
+    }
+
+    #photo-grid {
+        flex: 1;
+        overflow-y: auto;
+        padding: 2px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        background: #000;
+    }
+
+    .photo-item {
+        position: relative;
+        aspect-ratio: 1;
+        overflow: hidden;
+        cursor: pointer;
+    }
+
+    .photo-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .photo-item.selected::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,122,255,0.3);
+        border: 3px solid #007aff;
+    }
+
+    .photo-item .select-indicator {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid #fff;
+        background: rgba(0,0,0,0.3);
+        display: none;
+    }
+
+    .selection-mode .photo-item .select-indicator {
+        display: block;
+    }
+
+    .photo-item.selected .select-indicator {
+        background: #007aff;
+        border-color: #007aff;
+    }
+
+    .photo-item.selected .select-indicator::after {
+        content: '✓';
+        color: #fff;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 14px;
+    }
+
+    /* フルスクリーンビューア */
+    #viewer-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        z-index: 200;
+        display: none;
+    }
+
+    #viewer-modal.show {
+        display: block;
+    }
+
+    #viewer-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+        touch-action: pan-x;
+    }
+
+    #viewer-slider {
+        display: flex;
+        height: 100%;
+        transition: transform 0.3s ease-out;
+    }
+
+    .viewer-slide {
+        min-width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .viewer-slide img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .viewer-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 15px 20px;
+        background: linear-gradient(rgba(0,0,0,0.7), transparent);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 10;
+    }
+
+    .viewer-header button {
+        background: none;
+        border: none;
+        color: #fff;
+        font-size: 28px;
+        cursor: pointer;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .viewer-counter {
+        color: #fff;
+        font-size: 16px;
+    }
+
+    /* 空の状態 */
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #666;
+    }
+
+    .empty-state svg {
+        width: 80px;
+        height: 80px;
+        fill: #333;
+        margin-bottom: 20px;
+    }
+
+    /* トースト通知 */
+    #toast {
+        position: fixed;
+        bottom: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(255,255,255,0.9);
+        color: #000;
+        padding: 12px 24px;
+        border-radius: 20px;
+        font-size: 14px;
+        z-index: 1000;
+        opacity: 0;
+        transition: opacity 0.3s;
+        pointer-events: none;
+    }
+
+    #toast.show {
+        opacity: 1;
+    }
+</style>
+```
+
+</head>
+<body>
+    <!-- カメラビュー -->
+    <div id="camera-container">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+    </div>
+
+```
+<!-- コントロール -->
+<div class="controls">
+    <button class="btn" id="library-btn">
+        <svg viewBox="0 0 24 24">
+            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+        </svg>
+    </button>
+
+    <button class="btn" id="capture-btn"></button>
+
+    <button class="btn" id="switch-btn">
+        <svg viewBox="0 0 24 24">
+            <path d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 11.5V13H9v2.5L5.5 12 9 8.5V11h6V8.5l3.5 3.5-3.5 3.5z"/>
+        </svg>
+    </button>
+</div>
+
+<!-- ライブラリモーダル -->
+<div id="library-modal">
+    <div class="modal-header">
+        <button class="header-btn" id="close-library">完了</button>
+        <h2 id="library-title">写真</h2>
+        <button class="header-btn" id="select-btn">選択</button>
+    </div>
+    <div id="photo-grid"></div>
+</div>
+
+<!-- ビューアモーダル -->
+<div id="viewer-modal">
+    <div class="viewer-header">
+        <button id="close-viewer">×</button>
+        <div class="viewer-counter">
+            <span id="current-index">1</span> / <span id="total-count">1</span>
+        </div>
+        <button id="delete-photo">🗑️</button>
+    </div>
+    <div id="viewer-container">
+        <div id="viewer-slider"></div>
+    </div>
+</div>
+
+<!-- トースト -->
+<div id="toast"></div>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const captureBtn = document.getElementById('capture-btn');
+    const switchBtn = document.getElementById('switch-btn');
+    const libraryBtn = document.getElementById('library-btn');
+    const libraryModal = document.getElementById('library-modal');
+    const closeLibrary = document.getElementById('close-library');
+    const selectBtn = document.getElementById('select-btn');
+    const photoGrid = document.getElementById('photo-grid');
+    const viewerModal = document.getElementById('viewer-modal');
+    const closeViewer = document.getElementById('close-viewer');
+    const deletePhoto = document.getElementById('delete-photo');
+    const viewerSlider = document.getElementById('viewer-slider');
+    const currentIndexEl = document.getElementById('current-index');
+    const totalCountEl = document.getElementById('total-count');
+    const toast = document.getElementById('toast');
+    const libraryTitle = document.getElementById('library-title');
+
+    let currentStream = null;
+    let facingMode = 'environment'; // 'user' or 'environment'
+    let photos = JSON.parse(localStorage.getItem('cameraPhotos') || '[]');
+    let selectionMode = false;
+    let selectedPhotos = new Set();
+    let currentViewerIndex = 0;
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    // カメラ起動
+    async function startCamera() {
+        try {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            const constraints = {
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                },
+                audio: false // 消音
+            };
+
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+        } catch (error) {
+            showToast('カメラの起動に失敗しました');
+            console.error('Camera error:', error);
+        }
+    }
+
+    // 写真撮影
+    function capturePhoto() {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        canvas.toBlob((blob) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const photoData = {
+                    id: Date.now(),
+                    data: reader.result,
+                    timestamp: new Date().toISOString()
+                };
+                photos.unshift(photoData);
+                localStorage.setItem('cameraPhotos', JSON.stringify(photos));
+                showToast('写真を保存しました');
+            };
+            reader.readAsDataURL(blob);
+        }, 'image/jpeg', 0.9);
+    }
+
+    // カメラ切り替え
+    function switchCamera() {
+        facingMode = facingMode === 'environment' ? 'user' : 'environment';
+        startCamera();
+    }
+
+    // ライブラリを開く
+    function openLibrary() {
+        libraryModal.classList.add('show');
+        renderPhotoGrid();
+    }
+
+    // ライブラリを閉じる
+    function closeLibraryModal() {
+        libraryModal.classList.remove('show');
+        exitSelectionMode();
+    }
+
+    // 写真グリッド表示
+    function renderPhotoGrid() {
+        if (photos.length === 0) {
+            photoGrid.innerHTML = `
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                    </svg>
+                    <p>写真がありません</p>
+                </div>
+            `;
+            return;
+        }
+
+        photoGrid.innerHTML = photos.map((photo, index) => `
+            <div class="photo-item" data-index="${index}" data-id="${photo.id}">
+                <img src="${photo.data}" alt="Photo ${index + 1}">
+                <div class="select-indicator"></div>
+            </div>
+        `).join('');
+
+        // クリックイベント
+        document.querySelectorAll('.photo-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const index = parseInt(item.dataset.index);
+                const id = parseInt(item.dataset.id);
+                
+                if (selectionMode) {
+                    toggleSelection(id, item);
+                } else {
+                    openViewer(index);
+                }
+            });
+        });
+    }
+
+    // 選択モード
+    function enterSelectionMode() {
+        selectionMode = true;
+        selectedPhotos.clear();
+        photoGrid.classList.add('selection-mode');
+        selectBtn.textContent = 'キャンセル';
+        closeLibrary.textContent = '共有';
+        closeLibrary.disabled = true;
+        libraryTitle.textContent = '項目を選択';
+    }
+
+    function exitSelectionMode() {
+        selectionMode = false;
+        selectedPhotos.clear();
+        photoGrid.classList.remove('selection-mode');
+        selectBtn.textContent = '選択';
+        closeLibrary.textContent = '完了';
+        closeLibrary.disabled = false;
+        libraryTitle.textContent = '写真';
+        document.querySelectorAll('.photo-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+    }
+
+    function toggleSelection(id, element) {
+        if (selectedPhotos.has(id)) {
+            selectedPhotos.delete(id);
+            element.classList.remove('selected');
+        } else {
+            selectedPhotos.add(id);
+            element.classList.add('selected');
+        }
+
+        closeLibrary.disabled = selectedPhotos.size === 0;
+        libraryTitle.textContent = selectedPhotos.size > 0 
+            ? `${selectedPhotos.size}項目を選択` 
+            : '項目を選択';
+    }
+
+    // ビューア表示
+    function openViewer(index) {
+        currentViewerIndex = index;
+        viewerModal.classList.add('show');
+        renderViewer();
+    }
+
+    function closeViewerModal() {
+        viewerModal.classList.remove('show');
+    }
+
+    function renderViewer() {
+        viewerSlider.innerHTML = photos.map(photo => `
+            <div class="viewer-slide">
+                <img src="${photo.data}" alt="Photo">
+            </div>
+        `).join('');
+
+        updateViewerPosition();
+        updateViewerCounter();
+    }
+
+    function updateViewerPosition() {
+        viewerSlider.style.transform = `translateX(-${currentViewerIndex * 100}%)`;
+    }
+
+    function updateViewerCounter() {
+        currentIndexEl.textContent = currentViewerIndex + 1;
+        totalCountEl.textContent = photos.length;
+    }
+
+    // スワイプ操作
+    viewerSlider.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+    });
+
+    viewerSlider.addEventListener('touchmove', (e) => {
+        touchEndX = e.touches[0].clientX;
+    });
+
+    viewerSlider.addEventListener('touchend', () => {
+        const diff = touchStartX - touchEndX;
+        if (Math.abs(diff) > 50) {
+            if (diff > 0 && currentViewerIndex < photos.length - 1) {
+                currentViewerIndex++;
+            } else if (diff < 0 && currentViewerIndex > 0) {
+                currentViewerIndex--;
+            }
+            updateViewerPosition();
+            updateViewerCounter();
+        }
+    });
+
+    // 写真削除
+    function deleteCurrentPhoto() {
+        if (confirm('この写真を削除しますか?')) {
+            photos.splice(currentViewerIndex, 1);
+            localStorage.setItem('cameraPhotos', JSON.stringify(photos));
+            
+            if (photos.length === 0) {
+                closeViewerModal();
+                renderPhotoGrid();
+            } else {
+                if (currentViewerIndex >= photos.length) {
+                    currentViewerIndex = photos.length - 1;
+                }
+                renderViewer();
+            }
+            showToast('写真を削除しました');
+        }
+    }
+
+    // 共有機能
+    async function sharePhotos() {
+        const photosToShare = Array.from(selectedPhotos).map(id => 
+            photos.find(p => p.id === id)
+        );
+
+        if (navigator.share) {
+            try {
+                const files = await Promise.all(photosToShare.map(async (photo, i) => {
+                    const blob = await (await fetch(photo.data)).blob();
+                    return new File([blob], `photo_${i + 1}.jpg`, { type: 'image/jpeg' });
+                }));
+
+                await navigator.share({
+                    files: files,
+                    title: '写真を共有'
+                });
+                exitSelectionMode();
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    showToast('共有に失敗しました');
+                }
+            }
+        } else {
+            showToast('この機能はサポートされていません');
+        }
+    }
+
+    // トースト表示
+    function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 2000);
+    }
+
+    // イベントリスナー
+    captureBtn.addEventListener('click', capturePhoto);
+    switchBtn.addEventListener('click', switchCamera);
+    libraryBtn.addEventListener('click', openLibrary);
+    closeLibrary.addEventListener('click', () => {
+        if (selectionMode && selectedPhotos.size > 0) {
+            sharePhotos();
+        } else {
+            closeLibraryModal();
+        }
+    });
+    selectBtn.addEventListener('click', () => {
+        if (selectionMode) {
+            exitSelectionMode();
+        } else {
+            enterSelectionMode();
+        }
+    });
+    closeViewer.addEventListener('click', closeViewerModal);
+    deletePhoto.addEventListener('click', deleteCurrentPhoto);
+
+    // 初期化
+    startCamera();
+</script>
+```
+
+</body>
+</html>
